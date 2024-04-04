@@ -4,6 +4,12 @@ This is a version of the AdamW optimizer for use in torch that achieves the same
 
 There is a small (~10-20%) performance hit depending on your hardware.
 
+To install:
+
+```sh
+pip install adamw-bf16
+```
+
 To use:
 
 ```py
