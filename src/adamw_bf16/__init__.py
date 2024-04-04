@@ -1,4 +1,4 @@
-__version__ = "0.0.2"
+__version__ = "0.0.3"
 
 __all__ = ["AdamWBF16"]
 
@@ -10,6 +10,7 @@ from .stochastic import (
     add_stochastic_,
     addcdiv_stochastic_,
 )
+
 
 class AdamWBF16(Optimizer):
     decay_threshold = 5e-3
