@@ -24,6 +24,7 @@ class AdamWBF16(Optimizer):
         eps=1e-8,
         weight_decay=0,
         differentiable: bool=False,
+        cautious: bool=False,
     ):
         """
         Implements AdamW optimization specifically for bfloat16 models.
@@ -46,6 +47,7 @@ class AdamWBF16(Optimizer):
             differentiable=differentiable)
 
         super().__init__(params, defaults)
+        self.cautious = cautious
 
     @_use_grad_for_differentiable
     def step(self, closure=None):
@@ -101,6 +103,7 @@ class AdamWBF16(Optimizer):
                         eps=group["eps"],
                         decay_this_iteration=decay_this_iteration,
                         zero_grad=self.zero_grad,
+                        cautious=self.cautious
                     )
         return loss
 
@@ -118,6 +121,7 @@ def _make_step(
     eps: float,
     decay_this_iteration: float,
     zero_grad: bool,
+    cautious: bool,
 ):
     # Originally:
     # exp_avg.mul_(beta1).add_(grad, alpha=1 - beta1)
@@ -133,13 +137,27 @@ def _make_step(
     #     exp_avg_sq.sqrt().add_(eps, alpha=1),
     #     value=-lr * denom_correction,
     # )
-    addcdiv_stochastic_(
-        shift,
-        exp_avg,
-        exp_avg_sq.sqrt().add_(eps, alpha=1),
-        value=-lr * denom_correction,
-    )
-
+    # cautious optimization
+    if cautious:
+        # this comes from https://arxiv.org/abs/2411.16085
+        # Compute mask where update and gradient are aligned
+        mask = (exp_avg * grad > 0).to(grad.dtype)
+        # Scale b1 trace by mask ahead of the update
+        mask_mean = mask.mean() + eps
+        mask = mask / mask_mean
+        addcdiv_stochastic_(
+            shift,
+            exp_avg * mask,
+            exp_avg_sq.sqrt().add_(eps, alpha=1),
+            value=-lr * denom_correction,
+        )
+    else:
+        addcdiv_stochastic_(
+            shift,
+            exp_avg,
+            exp_avg_sq.sqrt().add_(eps, alpha=1),
+            value=-lr * denom_correction,
+        )
     buffer = p.clone()
     # Originally:
     # p.add_(shift)
